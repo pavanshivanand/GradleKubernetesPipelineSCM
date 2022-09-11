@@ -1,0 +1,44 @@
+node {
+
+    stage("Git Clone"){
+
+        git 'https://github.com/pavanshivanand/GradleKubernetesPipelineSCM.git'
+    }
+
+     stage('Gradle Build') {
+
+       sh './gradlew build'
+
+    }
+
+    stage("Docker build"){
+        sh 'docker version'
+        sh 'docker build -t gradlekubernetespipelinescm  .'
+        sh 'docker image list'
+        sh 'docker tag gradlekubernetespipelinescm pavanshivanand/gradlekubernetespipelinescm'
+    }
+
+    withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+        sh 'docker login -u $USERNAME -p $PASSWORD'
+    }
+
+    stage("Push Image to Docker Hub"){
+        sh 'docker push  pavanshivanand/gradlekubernetespipelinescm'
+    }
+     stage("SSH Into k8s Server") {
+        def remote = [:]
+        remote.name = 'kubernetes'
+        remote.host = '20.204.131.169'
+        remote.user = 'azureuser'
+        remote.password = 'Rachitha@123'
+        remote.allowAnyHosts = true
+
+        stage('Put k8s-spring-boot-deployment_LoadBalancer.yml onto kubernetes') {
+            sshPut remote: remote, from: 'k8s-spring-boot-deployment_LoadBalancer.yml', into: '.'
+        }
+
+        stage('Deploy spring boot') {
+          sshCommand remote: remote, command: "kubectl apply -f k8s-spring-boot-deployment_LoadBalancer.yml"
+        }
+}
+}
